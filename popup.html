@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 350px;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      padding: 10px;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    
+    .status.logging {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    
+    .status.stopped {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    
+    button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    
+    .btn-primary {
+      background-color: #007bff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #0056b3;
+    }
+    
+    .btn-danger {
+      background-color: #dc3545;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background-color: #c82333;
+    }
+    
+    .btn-success {
+      background-color: #28a745;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #218838;
+    }
+    
+    .stats {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    
+    .filters {
+      margin-bottom: 20px;
+    }
+    
+    .filter-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #555;
+    }
+    
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      box-sizing: border-box;
+    }
+    
+    textarea {
+      height: 60px;
+      resize: vertical;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .export-section {
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+    }
+    
+    .preview {
+      max-height: 200px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 3px;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    
+    .log-entry {
+      margin-bottom: 5px;
+      padding: 5px;
+      background-color: white;
+      border-radius: 3px;
+      border-left: 3px solid #007bff;
+    }
+    
+    .log-entry.error {
+      border-left-color: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>API Logger</h2>
+  </div>
+
+  <div id="status" class="status stopped">
+    <span>Logging arrete</span>
+    <span id="logCount">0 requetes</span>
+  </div>
+
+  <div class="controls">
+    <button id="startBtn" class="btn-primary">Demarrer</button>
+    <button id="stopBtn" class="btn-danger">Arreter</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat-item">
+      <span>Total requetes:</span>
+      <strong id="totalRequests">0</strong>
+    </div>
+    <div class="stat-item">
+      <span>Requetes GET:</span>
+      <strong id="getRequests">0</strong>
+    </div>
+    <div class="stat-item">
+      <span>Requetes POST:</span>
+      <strong id="postRequests">0</strong>
+    </div>
+    <div class="stat-item">
+      <span>Erreurs:</span>
+      <strong id="errorRequests">0</strong>
+    </div>
+  </div>
+
+  <div class="filters">
+    <h3>Filtres</h3>
+    
+    <div class="filter-group">
+      <label for="urlFilter">URLs a capturer (une par ligne, vide = toutes):</label>
+      <textarea id="urlFilter" placeholder="/api/
+/services/
+mondomaine.com"></textarea>
+    </div>
+
+    <div class="filter-group">
+      <label>Methodes HTTP:</label>
+      <div class="checkbox-group">
+        <div class="checkbox-item">
+          <input type="checkbox" id="methodGET" value="GET" checked>
+          <label for="methodGET">GET</label>
+        </div>
+        <div class="checkbox-item">
+          <input type="checkbox" id="methodPOST" value="POST" checked>
+          <label for="methodPOST">POST</label>
+        </div>
+        <div class="checkbox-item">
+          <input type="checkbox" id="methodPUT" value="PUT" checked>
+          <label for="methodPUT">PUT</label>
+        </div>
+        <div class="checkbox-item">
+          <input type="checkbox" id="methodDELETE" value="DELETE" checked>
+          <label for="methodDELETE">DELETE</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="export-section">
+    <div class="controls">
+      <button id="exportBtn" class="btn-success">Exporter JSON</button>
+      <button id="clearBtn" class="btn-danger">Vider logs</button>
+    </div>
+    
+    <div id="preview" class="preview" style="display: none;">
+      <h4>Aperçu des derniers logs:</h4>
+      <div id="previewContent"></div>
+    </div>
+    
+    <button id="togglePreview" style="width: 100%; margin-top: 10px; background: #6c757d; color: white; border: none; padding: 5px; border-radius: 3px;">
+      Voir apercu
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

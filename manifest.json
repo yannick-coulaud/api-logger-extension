@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "API Logger pour Migration Angular",
+  "version": "1.0",
+  "description": "Capture les appels REST pour migration AngularJS vers Angular",
+  
+  "permissions": [
+    "webRequest",
+    "storage",
+    "activeTab",
+    "downloads"
+  ],
+  
+  "host_permissions": [
+    "*://*/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "API Logger"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["*://*/*"]
+    }
+  ]
+}
