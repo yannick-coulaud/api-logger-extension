@@ -195,16 +195,85 @@ class APILogger {
     };
 
     const dataStr = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
     const filename = `api-logs-${new Date().toISOString().split('T')[0]}.json`;
     
-    chrome.downloads.download({
-      url: url,
-      filename: filename,
-      saveAs: true
-    });
+    // Dans un service worker, on doit utiliser une méthode différente
+    // Créer une data URL directement
+    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    
+    // Méthode principale avec chrome.downloads
+    if (chrome.downloads && chrome.downloads.download) {
+      chrome.downloads.download({
+        url: dataUrl,
+        filename: filename,
+        saveAs: true
+      }).then(() => {
+        console.log('Export réussi via chrome.downloads');
+      }).catch((error) => {
+        console.error('Erreur chrome.downloads:', error);
+        // Fallback vers méthode alternative
+        this.exportLogsAlternative(dataStr, filename);
+      });
+    } else {
+      // Fallback si chrome.downloads n'est pas disponible
+      this.exportLogsAlternative(dataStr, filename);
+    }
+  }
+
+  exportLogsAlternative(dataStr, filename) {
+    // Méthode alternative : ouvrir dans un nouvel onglet pour copier/télécharger
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Export API Logs</title>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            textarea { width: 100%; height: 400px; font-family: monospace; }
+            button { padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+            button:hover { background: #0056b3; }
+            .download-link { display: inline-block; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <h2>Export des logs API</h2>
+        <p>Fichier: <strong>${filename}</strong></p>
+        <p>Total des requêtes capturées: <strong>${this.logs.length}</strong></p>
+        
+        <h3>Option 1: Téléchargement direct</h3>
+        <a href="data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}" 
+           download="${filename}" class="download-link">Télécharger le fichier JSON</a>
+        
+        <h3>Option 2: Copier le contenu</h3>
+        <textarea id="jsonContent" readonly>${dataStr}</textarea>
+        <br>
+        <button onclick="copyToClipboard()">Copier dans le presse-papiers</button>
+        
+        <script>
+            function copyToClipboard() {
+                const textarea = document.getElementById('jsonContent');
+                textarea.select();
+                textarea.setSelectionRange(0, 99999);
+                navigator.clipboard.writeText(textarea.value).then(() => {
+                    alert('Contenu copié dans le presse-papiers!\\n\\nVous pouvez maintenant le coller dans un fichier .json');
+                }).catch(err => {
+                    console.error('Erreur copie:', err);
+                    alert('Erreur lors de la copie. Utilisez Ctrl+C pour copier manuellement.');
+                });
+            }
+            
+            // Auto-sélection du contenu au chargement
+            window.onload = function() {
+                document.getElementById('jsonContent').focus();
+            };
+        </script>
+    </body>
+    </html>`;
+    
+    // Encoder le HTML et ouvrir dans un nouvel onglet
+    const htmlUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent);
+    chrome.tabs.create({ url: htmlUrl });
   }
 }
 
