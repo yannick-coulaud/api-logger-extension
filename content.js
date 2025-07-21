@@ -1,26 +1,26 @@
-// content.js - Script de contenu (optionnel pour fonctionnalités avancées)
-
-// Ce fichier peut être utilisé pour des fonctionnalités avancées comme :
-// - Intercepter les appels XMLHttpRequest/fetch directement dans la page
-// - Ajouter des marqueurs visuels sur la page
-// - Communiquer avec le background script
-
+// content.js - Script de contenu pour intercepter les réponses JSON
 (function() {
   'use strict';
   
-  // Intercepter XMLHttpRequest si nécessaire
-  const originalXHR = window.XMLHttpRequest;
-  const originalFetch = window.fetch;
+  console.log('API Logger: Content script chargé');
   
   // Fonction pour envoyer des données au background script
   function sendToBackground(data) {
-    chrome.runtime.sendMessage({
-      action: 'logFromContent',
-      data: data
-    });
+    try {
+      chrome.runtime.sendMessage({
+        action: 'logFromContent',
+        data: data
+      });
+    } catch (e) {
+      console.error('Erreur envoi vers background:', e);
+    }
   }
   
-  // Override XMLHttpRequest (AngularJS utilise souvent XHR)
+  // Sauvegarder les fonctions originales
+  const originalXHR = window.XMLHttpRequest;
+  const originalFetch = window.fetch;
+  
+  // Override XMLHttpRequest (AngularJS utilise XHR)
   window.XMLHttpRequest = function() {
     const xhr = new originalXHR();
     
@@ -38,21 +38,105 @@
     xhr.send = function(data) {
       xhr._requestData = data;
       
-      // Écouter les changements d'état
-      xhr.addEventListener('loadend', function() {
-        const logData = {
-          method: xhr._method,
-          url: xhr._url,
-          status: xhr.status,
-          responseText: xhr.responseText,
-          requestData: xhr._requestData,
-          duration: Date.now() - xhr._startTime,
-          timestamp: new Date().toISOString(),
-          source: 'XMLHttpRequest'
-        };
+      // Intercepter la réponse
+      const originalOnReadyStateChange = xhr.onreadystatechange;
+      xhr.onreadystatechange = function() {
+        // Appeler le handler original s'il existe
+        if (originalOnReadyStateChange) {
+          originalOnReadyStateChange.apply(this, arguments);
+        }
         
-        sendToBackground(logData);
-      });
+        // Capturer quand la réponse est complète
+        if (xhr.readyState === 4) {
+          const logData = {
+            method: xhr._method,
+            url: xhr._url,
+            status: xhr.status,
+            statusText: xhr.statusText,
+            requestData: xhr._requestData,
+            responseText: xhr.responseText,
+            responseHeaders: xhr.getAllResponseHeaders(),
+            duration: Date.now() - xhr._startTime,
+            timestamp: new Date().toISOString(),
+            source: 'XMLHttpRequest'
+          };
+          
+          // Parser le JSON si possible
+          try {
+            if (xhr.responseText && xhr.responseText.trim().startsWith('{') || xhr.responseText.trim().startsWith('[')) {
+              logData.responseJSON = JSON.parse(xhr.responseText);
+            }
+          } catch (e) {
+            // Pas du JSON valide, on garde le texte brut
+          }
+          
+          // Parser la requête JSON si possible
+          try {
+            if (xhr._requestData && typeof xhr._requestData === 'string') {
+              if (xhr._requestData.trim().startsWith('{') || xhr._requestData.trim().startsWith('[')) {
+                logData.requestJSON = JSON.parse(xhr._requestData);
+              }
+            }
+          } catch (e) {
+            // Pas du JSON valide
+          }
+          
+          sendToBackground(logData);
+        }
+      };
+      
+      // Intercepter addEventListener pour 'load'
+      const originalAddEventListener = xhr.addEventListener;
+      xhr.addEventListener = function(event, handler, options) {
+        if (event === 'load' || event === 'loadend') {
+          const wrappedHandler = function(e) {
+            // Capturer la réponse
+            const logData = {
+              method: xhr._method,
+              url: xhr._url,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              requestData: xhr._requestData,
+              responseText: xhr.responseText,
+              responseHeaders: xhr.getAllResponseHeaders(),
+              duration: Date.now() - xhr._startTime,
+              timestamp: new Date().toISOString(),
+              source: 'XMLHttpRequest-event'
+            };
+            
+            // Parser le JSON si possible
+            try {
+              if (xhr.responseText && (xhr.responseText.trim().startsWith('{') || xhr.responseText.trim().startsWith('['))) {
+                logData.responseJSON = JSON.parse(xhr.responseText);
+              }
+            } catch (err) {
+              // Pas du JSON valide
+            }
+            
+            // Parser la requête JSON si possible
+            try {
+              if (xhr._requestData && typeof xhr._requestData === 'string') {
+                if (xhr._requestData.trim().startsWith('{') || xhr._requestData.trim().startsWith('[')) {
+                  logData.requestJSON = JSON.parse(xhr._requestData);
+                }
+              }
+            } catch (err) {
+              // Pas du JSON valide
+            }
+            
+            sendToBackground(logData);
+            
+            // Appeler le handler original
+            if (handler) {
+              handler.apply(this, arguments);
+            }
+          };
+          
+          return originalAddEventListener.call(this, event, wrappedHandler, options);
+        } else {
+          return originalAddEventListener.call(this, event, handler, options);
+        }
+      };
       
       return originalSend.apply(this, arguments);
     };
@@ -71,26 +155,85 @@
       // Cloner la réponse pour pouvoir la lire
       const clonedResponse = response.clone();
       
+      // Lire le contenu de la réponse
       clonedResponse.text().then(responseText => {
         const logData = {
           method: method,
           url: url,
           status: response.status,
-          responseText: responseText,
+          statusText: response.statusText,
           requestData: body,
+          responseText: responseText,
+          responseHeaders: Array.from(response.headers.entries()).reduce((acc, [key, value]) => {
+            acc[key] = value;
+            return acc;
+          }, {}),
           duration: Date.now() - startTime,
           timestamp: new Date().toISOString(),
           source: 'fetch'
         };
         
+        // Parser le JSON si possible
+        try {
+          if (responseText && (responseText.trim().startsWith('{') || responseText.trim().startsWith('['))) {
+            logData.responseJSON = JSON.parse(responseText);
+          }
+        } catch (e) {
+          // Pas du JSON valide
+        }
+        
+        // Parser la requête JSON si possible
+        try {
+          if (body && typeof body === 'string') {
+            if (body.trim().startsWith('{') || body.trim().startsWith('[')) {
+              logData.requestJSON = JSON.parse(body);
+            }
+          }
+        } catch (e) {
+          // Pas du JSON valide
+        }
+        
         sendToBackground(logData);
       }).catch(err => {
-        console.warn('Could not read response text:', err);
+        console.warn('Impossible de lire le contenu de la réponse:', err);
+        
+        // Logger quand même sans le contenu
+        const logData = {
+          method: method,
+          url: url,
+          status: response.status,
+          statusText: response.statusText,
+          requestData: body,
+          responseText: 'Erreur lecture contenu',
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+          source: 'fetch-error'
+        };
+        
+        sendToBackground(logData);
       });
       
       return response;
+    }).catch(error => {
+      // Logger les erreurs
+      const logData = {
+        method: method,
+        url: url,
+        status: 0,
+        statusText: 'Network Error',
+        requestData: body,
+        responseText: error.message,
+        error: error.toString(),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        source: 'fetch-error'
+      };
+      
+      sendToBackground(logData);
+      
+      throw error; // Re-throw pour ne pas casser l'application
     });
   };
   
-  console.log('API Logger content script loaded');
+  console.log('API Logger: XMLHttpRequest et fetch interceptés');
 })();

@@ -137,6 +137,23 @@ class APILogger {
 
   async handleMessage(request, sender, sendResponse) {
     switch (request.action) {
+      case 'logFromContent':
+        // Données venant du content script avec le contenu des réponses
+        if (this.isLogging && this.shouldLogContentData(request.data)) {
+          const enhancedLog = {
+            ...request.data,
+            tabId: sender.tab ? sender.tab.id : null,
+            tabUrl: sender.tab ? sender.tab.url : null,
+            captureMethod: 'content-script'
+          };
+          
+          this.logs.push(enhancedLog);
+          this.saveToStorage();
+          console.log('Log depuis content script:', enhancedLog);
+        }
+        sendResponse({ success: true });
+        break;
+        
       case 'startLogging':
         this.isLogging = true;
         this.filters = request.filters || this.filters;
@@ -171,6 +188,25 @@ class APILogger {
       default:
         sendResponse({ error: 'Unknown action' });
     }
+  }
+
+  shouldLogContentData(data) {
+    // Filtrer par méthode
+    if (!this.filters.methods.includes(data.method)) return false;
+    
+    // Filtrer par URL si des filtres sont définis
+    if (this.filters.urls.length > 0) {
+      return this.filters.urls.some(filter => data.url.includes(filter));
+    }
+    
+    // Exclure les requêtes internes du navigateur
+    if (data.url.startsWith('chrome-extension://') || 
+        data.url.startsWith('moz-extension://') ||
+        data.url.includes('favicon.ico')) {
+      return false;
+    }
+    
+    return true;
   }
 
   async saveToStorage() {
@@ -248,7 +284,7 @@ class APILogger {
         <h3>Option 2: Copier le contenu</h3>
         <textarea id="jsonContent" readonly>${dataStr}</textarea>
         <br>
-        <button onclick="copyToClipboard()">Copier dans le presse-papiers</button>
+        <button onclick="copyToClipboard()">📋 Copier dans le presse-papiers</button>
         
         <script>
             function copyToClipboard() {

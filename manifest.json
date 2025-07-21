@@ -9,7 +9,7 @@
     "storage",
     "activeTab",
     "downloads",
-	"downloads.open"
+    "downloads.open"
   ],
   
   "host_permissions": [
@@ -22,9 +22,10 @@
   
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
+      "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   
